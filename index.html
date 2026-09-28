@@ -90,12 +90,7 @@
     align-items: center; justify-content: center; gap: 16px;
     color: #5f6368;
   }
-  .preview-placeholder.no-video .preview-text {
-    color: #dc2626;
-    font-weight: 500;
-  }
   .preview-icon { width: 64px; height: 64px; opacity: 0.5; }
-  .preview-text { font-size: 16px; font-weight: 400; }
   .preview-hint { font-size: 13px; color: #80868b; margin-top: 16px; text-align: center; }
   
   /* Right side - join flow */
@@ -227,7 +222,6 @@
             <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
             <circle cx="12" cy="13" r="4"/>
           </svg>
-          <p class="preview-text">No video</p>
         </div>
       </div>
       <p class="preview-hint" id="preview-hint">1 Person is waiting for you to join the meeting.</p>
@@ -434,9 +428,6 @@ document.addEventListener('DOMContentLoaded', function() {
       if (hasMedia) {
         // Camera/mic available - show video preview
         startVideoPreview();
-      } else {
-        // No camera/mic - show "No video" state
-        document.getElementById('preview-placeholder').classList.add('no-video');
       }
     });
 
@@ -486,11 +477,9 @@ function startVideoPreview() {
       var placeholder = document.getElementById('preview-placeholder');
       placeholder.innerHTML = '';
       placeholder.appendChild(video);
-      placeholder.classList.remove('no-video');
     })
     .catch(function(err) {
       console.warn('Failed to start video preview:', err);
-      document.getElementById('preview-placeholder').classList.add('no-video');
     });
 }
 </script>
