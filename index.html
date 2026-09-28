@@ -250,7 +250,8 @@
 
       <!-- Join Form State (shown after getting ready) -->
       <div class="join-form hidden" id="join-form">
-        <button class="join-btn" id="join-btn">Join now</button>
+        <div id="cf-turnstile"></div>
+        <button class="join-btn" id="join-btn" disabled>Join now</button>
       </div>
 
       <div class="join-footer">
@@ -466,6 +467,9 @@ document.addEventListener('DOMContentLoaded', function() {
           document.getElementById('join-btn').disabled = true;
         }
       });
+    } else {
+      // Turnstile not loaded - enable button anyway
+      document.getElementById('join-btn').disabled = false;
     }
   }, 2000);
 
