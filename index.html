@@ -426,6 +426,10 @@ function showMediaError(dialog) {
 
 // Page initialization
 document.addEventListener('DOMContentLoaded', function() {
+  // Read meeting code from URL path
+  const meetingCode = window.location.pathname.slice(1) || 'cfw-nzfm-uha';
+  document.querySelector('.meeting-code').textContent = meetingCode;
+
   // Auto-detect camera/microphone on page load
   checkMediaDevices()
     .then(function(hasMedia) {
