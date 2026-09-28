@@ -64,12 +64,14 @@
   }
   .icon-btn:hover { background: #e8eaed; }
   .icon-btn svg { width: 20px; height: 20px; }
-  .signin-btn {
-    padding: 8px 20px; border-radius: 20px; border: 1px solid #dadce0;
-    background: transparent; color: #1a73e8; font-size: 14px; font-weight: 500;
-    cursor: pointer; transition: background 0.2s, border-color 0.2s;
+  .user-avatar {
+    width: 40px; height: 40px; border-radius: 50%;
+    background: #1a73e8; color: white;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; transition: background 0.2s, box-shadow 0.2s;
   }
-  .signin-btn:hover { background: #f1f3f4; border-color: #1a73e8; }
+  .user-avatar:hover { background: #1557b0; box-shadow: 0 2px 8px rgba(26,115,232,0.3); }
+  .user-avatar.hidden { display: none; }
 
   /* Main content - split layout */
   .meet-main { flex: 1; display: flex; overflow: hidden; }
@@ -209,7 +211,9 @@
       <button class="icon-btn" aria-label="Help" title="Help">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
       </button>
-      <button class="signin-btn">Sign in</button>
+      <div class="user-avatar hidden" id="user-avatar" title="Signed in">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24"><circle cx="12" cy="8" r="4"/><path d="M12 14c-5 0-8 3-8 6v2h16v-2c0-3-3-6-8-6z"/></svg>
+      </div>
     </div>
   </header>
 
@@ -456,6 +460,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // Join button click
   document.getElementById('join-btn').onclick = startFlow;
+
+  // Check signed-in state
+  if (localStorage.getItem('signedIn') === 'true') {
+    document.getElementById('user-avatar').classList.remove('hidden');
+  }
 });
 
 function startVideoPreview() {
