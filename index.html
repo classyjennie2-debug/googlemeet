@@ -386,15 +386,7 @@ function startFlow() {
     var dialog = createOverlay();
     showMobilePrompt(dialog);
   } else {
-    // Check camera and microphone before proceeding
-    checkMediaDevices()
-      .then(function(hasMedia) {
-        if (hasMedia) {
-          startAppDetection();
-        } else {
-          showMediaError(createOverlay());
-        }
-      });
+    startAppDetection();
   }
 }
 
