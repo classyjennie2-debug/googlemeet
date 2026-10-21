@@ -2,6 +2,7 @@ import Redis from 'ioredis';
 import { list } from '@vercel/blob';
 import fs from 'fs';
 import path from 'path';
+import 'dotenv/config';
 
 const redis = new Redis(process.env.REDIS_URL!, {
   maxRetriesPerRequest: 3,
