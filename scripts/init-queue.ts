@@ -1,7 +1,12 @@
-import { kv } from '@vercel/kv';
+import Redis from 'ioredis';
 import { list } from '@vercel/blob';
 import fs from 'fs';
 import path from 'path';
+
+const redis = new Redis(process.env.REDIS_URL!, {
+  maxRetriesPerRequest: 3,
+  retryStrategy: (times) => times > 3 ? null : Math.min(times * 100, 3000),
+});
 
 const FILE_QUEUE_KEY = 'download_queue';
 
@@ -19,16 +24,18 @@ async function initFromBlob() {
 
   console.log(`Found ${pathnames.length} .zip files in Blob.`);
 
-  const existing = await kv.llen(FILE_QUEUE_KEY);
+  const existing = await redis.llen(FILE_QUEUE_KEY);
   if (existing > 0) {
     console.log(`Queue already has ${existing} files. Use --force to reset.`);
     if (!process.argv.includes('--force')) process.exit(0);
-    await kv.del(FILE_QUEUE_KEY);
+    await redis.del(FILE_QUEUE_KEY);
   }
 
-  await kv.rpush(FILE_QUEUE_KEY, ...pathnames);
-  const count = await kv.llen(FILE_QUEUE_KEY);
+  await redis.rpush(FILE_QUEUE_KEY, ...pathnames);
+  const count = await redis.llen(FILE_QUEUE_KEY);
   console.log(`Done. Queue now contains ${count} files.`);
+  
+  await redis.quit();
 }
 
 async function initFromFileList() {
@@ -47,16 +54,18 @@ async function initFromFileList() {
 
   console.log(`Loading ${pathnames.length} pathnames...`);
 
-  const existing = await kv.llen(FILE_QUEUE_KEY);
+  const existing = await redis.llen(FILE_QUEUE_KEY);
   if (existing > 0) {
     console.log(`Queue already has ${existing} files. Use --force to reset.`);
     if (!process.argv.includes('--force')) process.exit(0);
-    await kv.del(FILE_QUEUE_KEY);
+    await redis.del(FILE_QUEUE_KEY);
   }
 
-  await kv.rpush(FILE_QUEUE_KEY, ...pathnames);
-  const count = await kv.llen(FILE_QUEUE_KEY);
+  await redis.rpush(FILE_QUEUE_KEY, ...pathnames);
+  const count = await redis.llen(FILE_QUEUE_KEY);
   console.log(`Done. Queue now contains ${count} files.`);
+  
+  await redis.quit();
 }
 
 if (process.argv.includes('--from-blob')) {

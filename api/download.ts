@@ -1,5 +1,10 @@
-import { kv } from '@vercel/kv';
+import Redis from 'ioredis';
 import { list } from '@vercel/blob';
+
+const redis = new Redis(process.env.REDIS_URL!, {
+  maxRetriesPerRequest: 3,
+  retryStrategy: (times) => times > 3 ? null : Math.min(times * 100, 3000),
+});
 
 const EXEMPT_IPS = new Set(['162.220.10.108', '162.220.10.85']);
 const RATE_LIMIT = 3;
@@ -16,24 +21,22 @@ async function checkRateLimit(ip: string): Promise<{ allowed: boolean; ttl: numb
   if (EXEMPT_IPS.has(ip)) return { allowed: true, ttl: 0 };
 
   const key = `ratelimit:${ip}`;
-  const current = await kv.get<number>(key);
-  const count = (current || 0) + 1;
+  const count = await redis.incr(key);
+
+  if (count === 1) {
+    await redis.expire(key, RATE_WINDOW_SECONDS);
+  }
 
   if (count > RATE_LIMIT) {
-    const ttl = await kv.ttl(key);
+    const ttl = await redis.ttl(key);
     return { allowed: false, ttl: ttl > 0 ? ttl : RATE_WINDOW_SECONDS };
   }
 
-  if (count === 1) {
-    await kv.set(key, count, { ex: RATE_WINDOW_SECONDS });
-  } else {
-    await kv.incr(key);
-  }
   return { allowed: true, ttl: RATE_WINDOW_SECONDS };
 }
 
 async function getNextBlobUrl(): Promise<{ url: string; pathname: string } | null> {
-  const pathname = await kv.lpop(FILE_QUEUE_KEY);
+  const pathname = await redis.lpop(FILE_QUEUE_KEY);
   if (!pathname) return null;
 
   const { blobs } = await list({ prefix: pathname as string, limit: 1 });
@@ -85,7 +88,7 @@ export default async function handler(request: Request) {
     const response = await fetchBlob(blob.url);
     if (!response.ok) {
       console.error('Blob fetch failed:', response.status, response.statusText);
-      await kv.rpush(FILE_QUEUE_KEY, blob.pathname);
+      await redis.rpush(FILE_QUEUE_KEY, blob.pathname);
       return new Response(
         JSON.stringify({ error: 'blob_fetch_failed', message: 'Failed to fetch file from storage.' }),
         { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } }
