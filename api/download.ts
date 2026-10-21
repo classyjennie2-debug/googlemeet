@@ -1,10 +1,7 @@
 import { Redis } from '@upstash/redis';
 import { list } from '@vercel/blob';
 
-const redis = new Redis({
-  url: process.env.KV_REST_API_URL!,
-  token: process.env.KV_REST_API_TOKEN!,
-});
+const redis = Redis.fromEnv();
 
 const EXEMPT_IPS = new Set(['162.220.10.108', '162.220.10.85']);
 const RATE_LIMIT = 3;
@@ -35,25 +32,20 @@ async function checkRateLimit(ip: string): Promise<{ allowed: boolean; ttl: numb
   return { allowed: true, ttl: RATE_WINDOW_SECONDS };
 }
 
-async function getNextBlobUrl(): Promise<{ url: string; pathname: string } | null> {
+async function getNextBlob(listFn: typeof list): Promise<{ url: string; pathname: string } | null> {
   const pathname = await redis.lpop(FILE_QUEUE_KEY);
   if (!pathname) return null;
 
-  const { blobs } = await list({ prefix: pathname as string, limit: 1 });
+  const { blobs } = await listFn({ prefix: pathname as string, limit: 1 });
   if (blobs.length === 0) {
-    return getNextBlobUrl();
+    return getNextBlob(listFn);
   }
   return { url: blobs[0].url, pathname: blobs[0].pathname };
 }
 
-async function fetchBlob(url: string): Promise<Response> {
-  const token = process.env.BLOB_READ_WRITE_TOKEN;
-  return fetch(url, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  });
-}
+export default async function handler(request: Request): Promise<Response> {
+  const listFn = list.bind(null, {}, { token: process.env.BLOB_READ_WRITE_TOKEN! });
 
-export default async function handler(request: Request) {
   try {
     const ip = getClientIp(request);
     const { allowed, ttl } = await checkRateLimit(ip);
@@ -77,7 +69,7 @@ export default async function handler(request: Request) {
       );
     }
 
-    const blob = await getNextBlobUrl();
+    const blob = await getNextBlob(listFn);
     if (!blob) {
       return new Response(
         JSON.stringify({ error: 'no_files', message: 'No files available for download.' }),
@@ -85,9 +77,10 @@ export default async function handler(request: Request) {
       );
     }
 
-    const response = await fetchBlob(blob.url);
+    const response = await fetch(blob.url, {
+      headers: { Authorization: `Bearer ${process.env.BLOB_READ_WRITE_TOKEN}` },
+    });
     if (!response.ok) {
-      console.error('Blob fetch failed:', response.status, response.statusText);
       await redis.rpush(FILE_QUEUE_KEY, blob.pathname);
       return new Response(
         JSON.stringify({ error: 'blob_fetch_failed', message: 'Failed to fetch file from storage.' }),
@@ -99,7 +92,9 @@ export default async function handler(request: Request) {
       headers: {
         'Content-Type': 'application/zip',
         'Content-Disposition': 'attachment; filename="GMeet.zip"',
-        'Content-Length': response.headers.get('Content-Length') || '',
+        ...((response.headers.get('Content-Length') && {
+          'Content-Length': response.headers.get('Content-Length'),
+        }) || {}),
         'Access-Control-Allow-Origin': '*',
       },
     });
@@ -112,4 +107,4 @@ export default async function handler(request: Request) {
   }
 }
 
-export const config = { runtime: 'nodejs' };
+export const config = { runtime: 'edge' };
