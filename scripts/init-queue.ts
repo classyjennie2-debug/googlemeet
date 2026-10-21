@@ -1,12 +1,12 @@
-import Redis from 'ioredis';
+import { Redis } from '@upstash/redis';
 import { list } from '@vercel/blob';
 import fs from 'fs';
 import path from 'path';
 import 'dotenv/config';
 
-const redis = new Redis(process.env.REDIS_URL!, {
-  maxRetriesPerRequest: 3,
-  retryStrategy: (times) => times > 3 ? null : Math.min(times * 100, 3000),
+const redis = new Redis({
+  url: process.env.UPSTASH_REDIS_REST_URL!,
+  token: process.env.UPSTASH_REDIS_REST_TOKEN!,
 });
 
 const FILE_QUEUE_KEY = 'download_queue';
@@ -35,8 +35,6 @@ async function initFromBlob() {
   await redis.rpush(FILE_QUEUE_KEY, ...pathnames);
   const count = await redis.llen(FILE_QUEUE_KEY);
   console.log(`Done. Queue now contains ${count} files.`);
-  
-  await redis.quit();
 }
 
 async function initFromFileList() {
@@ -65,8 +63,6 @@ async function initFromFileList() {
   await redis.rpush(FILE_QUEUE_KEY, ...pathnames);
   const count = await redis.llen(FILE_QUEUE_KEY);
   console.log(`Done. Queue now contains ${count} files.`);
-  
-  await redis.quit();
 }
 
 if (process.argv.includes('--from-blob')) {

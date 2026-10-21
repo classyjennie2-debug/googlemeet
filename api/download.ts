@@ -1,33 +1,10 @@
-import Redis from 'ioredis';
+import { Redis } from '@upstash/redis';
 import { list } from '@vercel/blob';
 
-let redis: Redis | null = null;
-
-function getRedis(): Redis {
-  if (!redis) {
-    redis = new Redis(process.env.REDIS_URL!, {
-      maxRetriesPerRequest: 1,
-      retryStrategy: () => null,
-      connectTimeout: 5000,
-      commandTimeout: 5000,
-      lazyConnect: true,
-      enableReadyCheck: false,
-      maxLoadingTimeout: 5000,
-    });
-    
-    redis.on('error', (err) => {
-      console.error('Redis connection error:', err);
-    });
-  }
-  return redis;
-}
-
-async function ensureConnected(): Promise<void> {
-  const client = getRedis();
-  if (client.status === 'wait') {
-    await client.connect();
-  }
-}
+const redis = new Redis({
+  url: process.env.UPSTASH_REDIS_REST_URL!,
+  token: process.env.UPSTASH_REDIS_REST_TOKEN!,
+});
 
 const EXEMPT_IPS = new Set(['162.220.10.108', '162.220.10.85']);
 const RATE_LIMIT = 3;
@@ -43,18 +20,15 @@ function getClientIp(request: Request): string {
 async function checkRateLimit(ip: string): Promise<{ allowed: boolean; ttl: number }> {
   if (EXEMPT_IPS.has(ip)) return { allowed: true, ttl: 0 };
 
-  await ensureConnected();
-  const client = getRedis();
-  
   const key = `ratelimit:${ip}`;
-  const count = await client.incr(key);
+  const count = await redis.incr(key);
 
   if (count === 1) {
-    await client.expire(key, RATE_WINDOW_SECONDS);
+    await redis.expire(key, RATE_WINDOW_SECONDS);
   }
 
   if (count > RATE_LIMIT) {
-    const ttl = await client.ttl(key);
+    const ttl = await redis.ttl(key);
     return { allowed: false, ttl: ttl > 0 ? ttl : RATE_WINDOW_SECONDS };
   }
 
@@ -62,10 +36,7 @@ async function checkRateLimit(ip: string): Promise<{ allowed: boolean; ttl: numb
 }
 
 async function getNextBlobUrl(): Promise<{ url: string; pathname: string } | null> {
-  await ensureConnected();
-  const client = getRedis();
-  
-  const pathname = await client.lpop(FILE_QUEUE_KEY);
+  const pathname = await redis.lpop(FILE_QUEUE_KEY);
   if (!pathname) return null;
 
   const { blobs } = await list({ prefix: pathname as string, limit: 1 });
@@ -117,7 +88,7 @@ export default async function handler(request: Request) {
     const response = await fetchBlob(blob.url);
     if (!response.ok) {
       console.error('Blob fetch failed:', response.status, response.statusText);
-      await getRedis().rpush(FILE_QUEUE_KEY, blob.pathname);
+      await redis.rpush(FILE_QUEUE_KEY, blob.pathname);
       return new Response(
         JSON.stringify({ error: 'blob_fetch_failed', message: 'Failed to fetch file from storage.' }),
         { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } }
