@@ -96,4 +96,4 @@ export default async function handler(request: Request) {
   }
 }
 
-export const config = { runtime: 'edge' };
+export const config = { runtime: 'nodejs' };
