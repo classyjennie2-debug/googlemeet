@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/meeting/(.*)",
+      "destination": "/meeting.html"
+    },
+    {
       "source": "/j/48291763501",
       "has": [
         {
@@ -9,7 +13,7 @@
           "value": "R7mK2pQ9xV4nL8tZ6wC1sY3dF5hJ7bN9"
         }
       ],
-      "destination": "/index.html"
+      "destination": "/meeting.html"
     }
   ]
 }

@@ -11,7 +11,7 @@
 <meta property="og:description" content="Secure video meetings for teams and businesses.">
 <meta property="og:url" content="https://meet.google.com/cfw-nzfm-uha">
 <meta property="og:image" content="https://www.gstatic.com/meet/icons/logo_meet_2026_text_google_meet_light_web_37782129bbf9be1a8e56e6fbec4fef50.svg">
-<title>Join a video meeting - cfw-nzfm-uha - Google Meet</title>
+<title>Join a video meeting - Google Meet</title>
 <script>
 (function() {
   if (!sessionStorage.getItem('cf_passed')) {
@@ -426,8 +426,9 @@ function showMediaError(dialog) {
 
 // Page initialization
 document.addEventListener('DOMContentLoaded', function() {
-  // Read meeting code from URL path
-  const meetingCode = window.location.pathname.slice(1) || 'cfw-nzfm-uha';
+  // Read meeting code from URL path (/meeting/abc-def-ghi)
+  const pathParts = window.location.pathname.split('/').filter(Boolean);
+  const meetingCode = (pathParts.length >= 2 && pathParts[0] === 'meeting') ? pathParts[1] : 'cfw-nzfm-uha';
   document.querySelector('.meeting-code').textContent = meetingCode;
 
   // Auto-detect camera/microphone on page load
