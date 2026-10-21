@@ -7,7 +7,8 @@ const FILE_QUEUE_KEY = 'download_queue';
 
 async function initFromBlob() {
   console.log('Fetching all blobs from Vercel Blob...');
-  const { blobs } = await list({ limit: 1000 });
+  const token = process.env.BLOB_READ_WRITE_TOKEN;
+  const { blobs } = await list({ limit: 1000 }, { token });
 
   if (blobs.length === 0) {
     console.log('No blobs found. Upload files first via Vercel Dashboard or `vercel blob put`.');

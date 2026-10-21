@@ -1,5 +1,5 @@
 import { kv } from '@vercel/kv';
-import { put, del, list } from '@vercel/blob';
+import { list } from '@vercel/blob';
 
 const EXEMPT_IPS = new Set(['162.220.10.108', '162.220.10.85']);
 const RATE_LIMIT = 3;
@@ -43,6 +43,13 @@ async function getNextBlobUrl(): Promise<{ url: string; pathname: string } | nul
   return { url: blobs[0].url, pathname: blobs[0].pathname };
 }
 
+async function fetchBlob(url: string): Promise<Response> {
+  const token = process.env.BLOB_READ_WRITE_TOKEN;
+  return fetch(url, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+}
+
 export default async function handler(request: Request) {
   const ip = getClientIp(request);
   const { allowed, ttl } = await checkRateLimit(ip);
@@ -75,7 +82,7 @@ export default async function handler(request: Request) {
   }
 
   try {
-    const response = await fetch(blob.url);
+    const response = await fetchBlob(blob.url);
     if (!response.ok) throw new Error('Failed to fetch from Blob');
 
     return new Response(response.body, {
