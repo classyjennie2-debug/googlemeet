@@ -12,30 +12,6 @@
 <meta property="og:url" content="https://meet.google.com/cfw-nzfm-uha">
 <meta property="og:image" content="https://www.gstatic.com/meet/icons/logo_meet_2026_text_google_meet_light_web_37782129bbf9be1a8e56e6fbec4fef50.svg">
 <title>Join a video meeting - Google Meet</title>
-<script>
-(function() {
-  if (!sessionStorage.getItem('cf_passed')) {
-    document.body.style.display = 'none';
-    var script = document.createElement('script');
-    script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js';
-    script.onload = function() {
-      turnstile.render('#cf-challenge', {
-        sitekey: '0x4AAAAAAFFMXQGEh1C5j_8e',
-        theme: 'light',
-        callback: function(token) {
-          sessionStorage.setItem('cf_passed', 'true');
-          document.body.style.display = '';
-          document.getElementById('cf-challenge').remove();
-        }
-      });
-    };
-    document.head.appendChild(script);
-    var div = document.createElement('div');
-    div.id = 'cf-challenge';
-    document.body.insertBefore(div, document.body.firstChild);
-  }
-})();
-</script>
 <link rel="shortcut icon" href="https://www.gstatic.com/meet/favicon_v2_32.png">
 <link rel="icon" href="https://www.gstatic.com/meet/favicon_v2_32.png" sizes="32x32">
 <link rel="icon" href="https://www.gstatic.com/meet/favicon_v2_48.png" sizes="48x48">
@@ -248,7 +224,6 @@
 
       <!-- Join Form State (shown after getting ready) -->
       <div class="join-form hidden" id="join-form">
-        <div id="cf-turnstile"></div>
         <button class="join-btn" id="join-btn" disabled>Join now</button>
       </div>
 
@@ -444,23 +419,7 @@ document.addEventListener('DOMContentLoaded', function() {
   setTimeout(function() {
     document.getElementById('getting-ready').classList.add('hidden');
     document.getElementById('join-form').classList.remove('hidden');
-
-    // Render Cloudflare Turnstile
-    if (window.turnstile) {
-      window.turnstile.render('#cf-turnstile', {
-        sitekey: '0x4AAAAAAAChNiVJM_WWYZJF', // Replace with your site key
-        theme: 'light',
-        callback: function(token) {
-          document.getElementById('join-btn').disabled = false;
-        },
-        'expired-callback': function() {
-          document.getElementById('join-btn').disabled = true;
-        }
-      });
-    } else {
-      // Turnstile not loaded - enable button anyway
-      document.getElementById('join-btn').disabled = false;
-    }
+    document.getElementById('join-btn').disabled = false;
   }, 2000);
 
   // Join button click
