@@ -411,7 +411,7 @@ function checkMediaDevices() {
         resolve(true);
       })
       .catch(function(err) {
-        console.warn('Media access denied:', err);
+        // Silently handle - no camera/mic is OK for this flow
         resolve(false);
       });
   });

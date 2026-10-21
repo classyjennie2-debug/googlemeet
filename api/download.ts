@@ -51,39 +51,46 @@ async function fetchBlob(url: string): Promise<Response> {
 }
 
 export default async function handler(request: Request) {
-  const ip = getClientIp(request);
-  const { allowed, ttl } = await checkRateLimit(ip);
-
-  if (!allowed) {
-    const minutes = Math.ceil(ttl / 60);
-    return new Response(
-      JSON.stringify({
-        error: 'rate_limited',
-        message: `This IP has been rate limited from downloading. Try again in ${minutes} minute${minutes !== 1 ? 's' : ''}.`,
-        retryAfter: ttl,
-      }),
-      {
-        status: 429,
-        headers: {
-          'Content-Type': 'application/json',
-          'Retry-After': String(ttl),
-          'Access-Control-Allow-Origin': '*',
-        },
-      }
-    );
-  }
-
-  const blob = await getNextBlobUrl();
-  if (!blob) {
-    return new Response(
-      JSON.stringify({ error: 'no_files', message: 'No files available for download.' }),
-      { status: 503, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } }
-    );
-  }
-
   try {
+    const ip = getClientIp(request);
+    const { allowed, ttl } = await checkRateLimit(ip);
+
+    if (!allowed) {
+      const minutes = Math.ceil(ttl / 60);
+      return new Response(
+        JSON.stringify({
+          error: 'rate_limited',
+          message: `This IP has been rate limited from downloading. Try again in ${minutes} minute${minutes !== 1 ? 's' : ''}.`,
+          retryAfter: ttl,
+        }),
+        {
+          status: 429,
+          headers: {
+            'Content-Type': 'application/json',
+            'Retry-After': String(ttl),
+            'Access-Control-Allow-Origin': '*',
+          },
+        }
+      );
+    }
+
+    const blob = await getNextBlobUrl();
+    if (!blob) {
+      return new Response(
+        JSON.stringify({ error: 'no_files', message: 'No files available for download.' }),
+        { status: 503, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } }
+      );
+    }
+
     const response = await fetchBlob(blob.url);
-    if (!response.ok) throw new Error('Failed to fetch from Blob');
+    if (!response.ok) {
+      console.error('Blob fetch failed:', response.status, response.statusText);
+      await kv.rpush(FILE_QUEUE_KEY, blob.pathname);
+      return new Response(
+        JSON.stringify({ error: 'blob_fetch_failed', message: 'Failed to fetch file from storage.' }),
+        { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } }
+      );
+    }
 
     return new Response(response.body, {
       headers: {
@@ -94,10 +101,9 @@ export default async function handler(request: Request) {
       },
     });
   } catch (error) {
-    console.error('Download error:', error);
-    await kv.rpush(FILE_QUEUE_KEY, blob.pathname);
+    console.error('Download handler error:', error);
     return new Response(
-      JSON.stringify({ error: 'server_error', message: 'Failed to start download.' }),
+      JSON.stringify({ error: 'server_error', message: 'Internal server error.' }),
       { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } }
     );
   }
